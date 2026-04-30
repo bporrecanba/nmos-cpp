@@ -1,0 +1,46 @@
+name: Build Windows Binaries
+
+on:
+  workflow_dispatch:  # manual trigger only
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Conan
+        run: pip install conan~=2.20
+
+      - name: Configure and Build
+        uses: lukka/run-cmake@v10
+        with:
+          cmakeListsTxtPath: '${{ github.workspace }}/Development/CMakeLists.txt'
+          configurePresetAdditionalArgs: "[]"
+          cmakeAppendedArgs: >-
+            -GNinja
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX="${{ runner.workspace }}/install"
+            -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES:STRING="third_party/cmake/conan_provider.cmake"
+
+      - name: Collect binaries
+        shell: pwsh
+        run: |
+          mkdir artifact
+          Copy-Item Development/build/nmos-cpp-node.exe artifact/
+          Copy-Item Development/build/nmos-cpp-registry.exe artifact/
+          Copy-Item Development/build/*.dll artifact/ -ErrorAction SilentlyContinue
+          # Also grab Conan-installed DLLs
+          Get-ChildItem -Path Development/build -Recurse -Filter *.dll | Copy-Item -Destination artifact/ -ErrorAction SilentlyContinue
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nmos-cpp-windows-x64
+          path: artifact/
