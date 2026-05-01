@@ -15,10 +15,11 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Conan and Ninja
-        run: |
-          pip install conan~=2.20
-          choco install ninja -y
+      - name: Install Conan
+        run: pip install conan~=2.20
+
+      - name: Detect default Conan profile
+        run: conan profile detect --force
 
       - name: Configure
         shell: cmd
@@ -26,19 +27,21 @@ jobs:
           cd Development
           mkdir build
           cd build
-          cmake .. -GNinja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES:STRING="third_party/cmake/conan_provider.cmake"
+          cmake .. -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES:STRING="Release" -DCMAKE_PROJECT_TOP_LEVEL_INCLUDES:STRING="third_party/cmake/conan_provider.cmake" -DCONAN_INSTALL_ARGS:STRING="--build=missing"
 
       - name: Build
         shell: cmd
         run: |
           cd Development/build
-          cmake --build . --config Release
+          cmake --build . --config Release --parallel
 
       - name: Collect binaries
         shell: pwsh
         run: |
           mkdir artifact
-          Get-ChildItem -Path Development/build -Recurse -Include *.exe,*.dll | Copy-Item -Destination artifact/
+          Get-ChildItem -Path Development/build -Recurse -Include *.exe,*.dll -ErrorAction SilentlyContinue | Where-Object { $_.DirectoryName -match 'Release' -or $_.DirectoryName -match 'bin' } | Copy-Item -Destination artifact/
+          # Also grab any DLLs from Conan cache
+          Get-ChildItem -Path "$env:USERPROFILE/.conan2" -Recurse -Filter *.dll -ErrorAction SilentlyContinue | Copy-Item -Destination artifact/ -ErrorAction SilentlyContinue
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
